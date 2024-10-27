@@ -1,50 +1,73 @@
-import telebot
-from telebot import types
+import logging
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
-API_TOKEN = '7631125254:AAGx9b1TAeNu3kHMBIaFf3XkcWjYyy8UG5A'
-bot = telebot.TeleBot(API_TOKEN)
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
 
-# Command to start the bot
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    bot.reply_to(message, "Welcome to the group manager bot! Use /help to see available commands.")
+logger = logging.getLogger(__name__)
 
-# Command to list group members
-@bot.message_handler(commands=['members'])
-def list_members(message):
-    chat_id = message.chat.id
-    members = bot.get_chat_administrators(chat_id)
-    member_names = [f"{member.user.first_name} @{member.user.username}" for member in members]
-    bot.reply_to(message, "\n".join(member_names))
+# Replace with your admin user ID
+ADMIN_ID = 5436530930  # Change this to your own Telegram user ID
 
-# Command to ban a user
-@bot.message_handler(commands=['ban'])
-def ban_user(message):
-    if message.reply_to_message:
-        user_id = message.reply_to_message.from_user.id
-        bot.kick_chat_member(message.chat.id, user_id)
-        bot.reply_to(message, f"Banned {message.reply_to_message.from_user.first_name}.")
-    else:
-        bot.reply_to(message, "Please reply to a message of the user you want to ban.")
+# Start command handler
+def start(update: Update, context: CallbackContext) -> None:
+    if update.message.from_user.id != ADMIN_ID:
+        update.message.reply_text("You do not have permission to use this bot.")
+        return
 
-# Command to unban a user
-@bot.message_handler(commands=['unban'])
-def unban_user(message):
-    if message.reply_to_message:
-        user_id = message.reply_to_message.from_user.id
-        bot.unban_chat_member(message.chat.id, user_id)
-        bot.reply_to(message, f"Unbanned {message.reply_to_message.from_user.first_name}.")
-    else:
-        bot.reply_to(message, "Please reply to a message of the user you want to unban.")
+    update.message.reply_text(
+        'Welcome! Please provide the channel owner name, channel link, and your feedback in the following format:\n'
+        'Owner: [Owner Name]\n'
+        'Link: [Channel Link]\n'
+        'Feedback: [Your Feedback]'
+    )
 
-# Command to delete a message
-@bot.message_handler(commands=['delete'])
-def delete_message(message):
-    if message.reply_to_message:
-        bot.delete_message(message.chat.id, message.reply_to_message.message_id)
-        bot.reply_to(message, "Message deleted.")
-    else:
-        bot.reply_to(message, "Please reply to the message you want to delete.")
+# Feedback handler
+def handle_feedback(update: Update, context: CallbackContext) -> None:
+    if update.message.from_user.id != ADMIN_ID:
+        update.message.reply_text("You do not have permission to use this bot.")
+        return
 
-# Start polling
-bot.polling()
+    feedback_message = update.message.text.split('\n')
+
+    if len(feedback_message) < 3:
+        update.message.reply_text('Please provide all details: Owner, Link, and Feedback.')
+        return
+
+    try:
+        owner_line = feedback_message[0].split(': ', 1)[1]
+        link_line = feedback_message[1].split(': ', 1)[1]
+        feedback_line = feedback_message[2].split(': ', 1)[1]
+
+        feedback_entry = f"Owner: {owner_line}\nLink: {link_line}\nFeedback: {feedback_line}\n{'-' * 40}\n"
+
+        # Save feedback to a file
+        with open('feedback.txt', 'a') as file:
+            file.write(feedback_entry)
+
+        update.message.reply_text('Thank you for your feedback!')
+
+    except IndexError:
+        update.message.reply_text('Please ensure your message follows the correct format.')
+
+def main() -> None:
+    # Replace 'YOUR_TOKEN_HERE' with your bot token
+    updater = Updater("7631125254:AAGx9b1TAeNu3kHMBIaFf3XkcWjYyy8UG5A")
+
+    # Get the dispatcher to register handlers
+    dp = updater.dispatcher
+
+    # Register command and message handlers
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_feedback))
+
+    # Start the Bot
+    updater.start_polling()
+
+    # Run the bot until you send a signal to stop
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
