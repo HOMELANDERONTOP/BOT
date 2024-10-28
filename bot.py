@@ -1,67 +1,48 @@
-import os
-import logging
-from telegram import Update
-from pytube import YouTube
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+import requests
+from telegram import Bot
+from telegram.error import TelegramError
 
-# Setup logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Replace these with your values
+TELEGRAM_BOT_TOKEN = "7631125254:AAGx9b1TAeNu3kHMBIaFf3XkcWjYyy8UG5A"
+CHAT_ID = "-1001957862866"  # Use the negative chat ID for groups (e.g., -123456789)
 
-# Set your Spotify credentials
-SPOTIPY_CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID'
-SPOTIPY_CLIENT_SECRET = 'YOUR_SPOTIFY_CLIENT_SECRET'
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
-# Initialize Spotify client
-sp = spotipy.Spotify(client_credentials_manager=SpotifyClientCredentials(SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET))
-
-async def start(update: Update, context: CallbackContext):
-    await update.message.reply_text("Welcome to the Music Bot! Use /play <YouTube URL> or /spotify <Spotify URL>.")
-
-async def play(update: Update, context: CallbackContext):
-    if len(context.args) != 1:
-        await update.message.reply_text("Usage: /play <YouTube URL>")
-        return
-
-    url = context.args[0]
+def download_file(url, file_path):
+    """Downloads a file from a given URL to a specified local file path."""
     try:
-        yt = YouTube(url)
-        audio_stream = yt.streams.filter(only_audio=True).first()
-        audio_file = audio_stream.download()
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(file_path, "wb") as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+        print(f"Downloaded: {file_path}")
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to download {url}. Error: {e}")
+        return None
+    return file_path
 
-        await context.bot.send_audio(chat_id=update.effective_chat.id, audio=open(audio_file, 'rb'))
-        os.remove(audio_file)  # Clean up after sending
-    except Exception as e:
-        await update.message.reply_text(f"Error: {str(e)}")
-
-async def spotify(update: Update, context: CallbackContext):
-    if len(context.args) != 1:
-        await update.message.reply_text("Usage: /spotify <Spotify URL>")
-        return
-
-    url = context.args[0]
-    track_id = url.split('/')[-1]  # Extract track ID from URL
-
+def upload_file_to_telegram(file_path):
+    """Uploads a local file to the specified Telegram group."""
     try:
-        track = sp.track(track_id)
-        audio_url = track['preview_url']  # Get the preview URL
+        with open(file_path, "rb") as file:
+            bot.send_document(chat_id=CHAT_ID, document=file)
+        print(f"Uploaded: {file_path}")
+    except TelegramError as e:
+        print(f"Failed to upload {file_path}. Error: {e}")
 
-        if audio_url:
-            await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio_url)
-        else:
-            await update.message.reply_text("No preview available for this track.")
-    except Exception as e:
-        await update.message.reply_text(f"Error: {str(e)}")
+def main(urls):
+    """Main function to download files from a list of URLs and upload them to Telegram."""
+    for url in urls:
+        filename = url.split("/")[-1]  # Get the filename from the URL
+        file_path = download_file(url, filename)
+        if file_path:
+            upload_file_to_telegram(file_path)
 
-def main():
-    TELEGRAM_BOT_TOKEN = '7631125254:AAGx9b1TAeNu3kHMBIaFf3XkcWjYyy8UG5A'
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("play", play))
-    application.add_handler(CommandHandler("spotify", spotify))
-
-    application.run_polling()
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    # List of URLs to download and upload
+    urls = [
+        "https://example.com/file1.pdf",
+        "https://example.com/file2.jpg"
+    ]
+    main(urls)
