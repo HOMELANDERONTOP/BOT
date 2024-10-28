@@ -1,72 +1,68 @@
+import os
 import logging
 from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, Filters, CallbackContext
+from pytube import YouTube
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 
-# Set up logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+# Setup logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-logger = logging.getLogger(__name__)
+# Set your Spotify credentials
+SPOTIPY_CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID'
+SPOTIPY_CLIENT_SECRET = 'YOUR_SPOTIFY_CLIENT_SECRET'
 
-# Replace with your admin user ID
-ADMIN_ID = 5436530930  # Change this to your own Telegram user ID
+# Initialize Spotify client
+sp = spotipy.Spotify(client_credentials_manager=SpotifyClientCredentials(SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET))
 
-# Start command handler
-def start(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id != ADMIN_ID:
-        update.message.reply_text("You do not have permission to use this bot.")
+async def start(update: Update, context: CallbackContext):
+    await update.message.reply_text("Welcome to the Music Bot! Use /play <YouTube URL> or /spotify <Spotify URL>.")
+
+async def play(update: Update, context: CallbackContext):
+    if len(context.args) != 1:
+        await update.message.reply_text("Usage: /play <YouTube URL>")
         return
 
-    update.message.reply_text(
-        'Welcome! Please provide the channel owner name, channel link, and your feedback in the following format:\n'
-        'Owner: [Owner Name]\n'
-        'Link: [Channel Link]\n'
-        'Feedback: [Your Feedback]'
-    )
+    url = context.args[0]
+    try:
+        yt = YouTube(url)
+        audio_stream = yt.streams.filter(only_audio=True).first()
+        audio_file = audio_stream.download()
 
-# Feedback handler
-def handle_feedback(update: Update, context: CallbackContext) -> None:
-    if update.message.from_user.id != ADMIN_ID:
-        update.message.reply_text("You do not have permission to use this bot.")
+        await context.bot.send_audio(chat_id=update.effective_chat.id, audio=open(audio_file, 'rb'))
+        os.remove(audio_file)  # Clean up after sending
+    except Exception as e:
+        await update.message.reply_text(f"Error: {str(e)}")
+
+async def spotify(update: Update, context: CallbackContext):
+    if len(context.args) != 1:
+        await update.message.reply_text("Usage: /spotify <Spotify URL>")
         return
 
-    feedback_message = update.message.text.split('\n')
-
-    if len(feedback_message) < 3:
-        update.message.reply_text('Please provide all details: Owner, Link, and Feedback.')
-        return
+    url = context.args[0]
+    track_id = url.split('/')[-1]  # Extract track ID from URL
 
     try:
-        owner_line = feedback_message[0].split(': ', 1)[1]
-        link_line = feedback_message[1].split(': ', 1)[1]
-        feedback_line = feedback_message[2].split(': ', 1)[1]
+        track = sp.track(track_id)
+        audio_url = track['preview_url']  # Get the preview URL
 
-        feedback_entry = f"Owner: {owner_line}\nLink: {link_line}\nFeedback: {feedback_line}\n{'-' * 40}\n"
+        if audio_url:
+            await context.bot.send_audio(chat_id=update.effective_chat.id, audio=audio_url)
+        else:
+            await update.message.reply_text("No preview available for this track.")
+    except Exception as e:
+        await update.message.reply_text(f"Error: {str(e)}")
 
-        # Save feedback to a file
-        with open('feedback.txt', 'a') as file:
-            file.write(feedback_entry)
+def main():
+    TELEGRAM_BOT_TOKEN = '7631125254:AAGx9b1TAeNu3kHMBIaFf3XkcWjYyy8UG5A'
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-        update.message.reply_text('Thank you for your feedback!')
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("play", play))
+    application.add_handler(CommandHandler("spotify", spotify))
 
-    except IndexError:
-        update.message.reply_text('Please ensure your message follows the correct format.')
-
-def main() -> None:
-    # Replace 'YOUR_TOKEN_HERE' with your bot token
-    updater = Updater("7631125254:AAGx9b1TAeNu3kHMBIaFf3XkcWjYyy8UG5A")
-
-    # Get the dispatcher to register handlers
-    dp = updater.dispatcher
-
-    # Register command and message handlers
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_feedback))
-
-    # Start the Bot
-    updater.start_polling()
-
-    # Run the bot until you send a signal to stop
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
