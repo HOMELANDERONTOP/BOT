@@ -1,7 +1,6 @@
 import os
 import logging
 from telegram import Update
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
 from pytube import YouTube
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
