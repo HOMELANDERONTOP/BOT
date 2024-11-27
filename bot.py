@@ -4,7 +4,6 @@ import json
 import requests
 import logging
 import time
-from pymongo import MongoClient
 from datetime import datetime, timedelta
 import certifi
 import random
