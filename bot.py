@@ -70,9 +70,8 @@ async def run_attack(chat_id, ip, port, duration, context, user_id):
             print(f"[stderr]\n{stderr.decode()}")
 
     except Exception as e:
-        await context.bot.send_message(chat_id=chat_id, text=f"*⚠️ Error during the attack: {str(e)}*", parse_mode='Markdown')
-
-    finally:
+        await context.bot.send_message(chat_id=chat_id, text=f"*⚠️ Error during the attack: {str(e)}*", parse_mode='Markdown'
+                                       
     
         # Final Attack Message Upon Completion
 def notify_attack_finished(target_ip, target_port, duration):
